@@ -1,0 +1,14 @@
+{
+  "strategies": [
+    {
+      "name": "baseline",
+      "model": "openai/gpt-oss-20b",
+      "prompt_version": "criterion-v3"
+    },
+    {
+      "name": "evidence_first",
+      "model": "openai/gpt-oss-20b",
+      "prompt_version": "criterion-v4-evidence-first"
+    }
+  ]
+}

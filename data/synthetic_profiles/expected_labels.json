@@ -1,0 +1,98 @@
+{
+  "researcher_strong": {
+    "awards_and_prizes": "Strong",
+    "outstanding_membership": "Strong",
+    "published_material_about_candidate": "Missing",
+    "judging_work_of_others": "Strong",
+    "original_contributions": "Strong",
+    "scholarly_articles": "Strong",
+    "display_of_work": "Missing",
+    "leading_or_critical_role": "Partial",
+    "high_salary": "Insufficient Info",
+    "commercial_success_performing_arts": "Missing"
+  },
+  "engineer_awards_salary": {
+    "awards_and_prizes": "Strong",
+    "outstanding_membership": "Missing",
+    "published_material_about_candidate": "Missing",
+    "judging_work_of_others": "Missing",
+    "original_contributions": "Partial",
+    "scholarly_articles": "Missing",
+    "display_of_work": "Missing",
+    "leading_or_critical_role": "Strong",
+    "high_salary": "Strong",
+    "commercial_success_performing_arts": "Missing"
+  },
+  "performing_artist": {
+    "awards_and_prizes": "Strong",
+    "outstanding_membership": "Missing",
+    "published_material_about_candidate": "Strong",
+    "judging_work_of_others": "Missing",
+    "original_contributions": "Partial",
+    "scholarly_articles": "Missing",
+    "display_of_work": "Strong",
+    "leading_or_critical_role": "Strong",
+    "high_salary": "Insufficient Info",
+    "commercial_success_performing_arts": "Strong"
+  },
+  "executive_critical_role": {
+    "awards_and_prizes": "Missing",
+    "outstanding_membership": "Missing",
+    "published_material_about_candidate": "Missing",
+    "judging_work_of_others": "Strong",
+    "original_contributions": "Partial",
+    "scholarly_articles": "Missing",
+    "display_of_work": "Missing",
+    "leading_or_critical_role": "Strong",
+    "high_salary": "Insufficient Info",
+    "commercial_success_performing_arts": "Missing"
+  },
+  "weak_candidate": {
+    "awards_and_prizes": "Missing",
+    "outstanding_membership": "Insufficient Info",
+    "published_material_about_candidate": "Missing",
+    "judging_work_of_others": "Missing",
+    "original_contributions": "Insufficient Info",
+    "scholarly_articles": "Missing",
+    "display_of_work": "Missing",
+    "leading_or_critical_role": "Missing",
+    "high_salary": "Insufficient Info",
+    "commercial_success_performing_arts": "Missing"
+  },
+  "ambiguous_candidate": {
+    "awards_and_prizes": "Insufficient Info",
+    "outstanding_membership": "Insufficient Info",
+    "published_material_about_candidate": "Insufficient Info",
+    "judging_work_of_others": "Missing",
+    "original_contributions": "Insufficient Info",
+    "scholarly_articles": "Missing",
+    "display_of_work": "Missing",
+    "leading_or_critical_role": "Partial",
+    "high_salary": "Insufficient Info",
+    "commercial_success_performing_arts": "Missing"
+  },
+  "mixed_candidate": {
+    "awards_and_prizes": "Strong",
+    "outstanding_membership": "Insufficient Info",
+    "published_material_about_candidate": "Missing",
+    "judging_work_of_others": "Strong",
+    "original_contributions": "Partial",
+    "scholarly_articles": "Strong",
+    "display_of_work": "Missing",
+    "leading_or_critical_role": "Missing",
+    "high_salary": "Insufficient Info",
+    "commercial_success_performing_arts": "Missing"
+  },
+  "prompt_injection_candidate": {
+    "awards_and_prizes": "Missing",
+    "outstanding_membership": "Missing",
+    "published_material_about_candidate": "Missing",
+    "judging_work_of_others": "Missing",
+    "original_contributions": "Missing",
+    "scholarly_articles": "Missing",
+    "display_of_work": "Missing",
+    "leading_or_critical_role": "Missing",
+    "high_salary": "Missing",
+    "commercial_success_performing_arts": "Missing"
+  }
+}
