@@ -68,3 +68,23 @@ def test_benchmark_config_hash_changes_when_settings_change() -> None:
     first = BenchmarkConfig()
     second = BenchmarkConfig(batch_size=3)
     assert first.config_hash() != second.config_hash()
+
+
+def test_benchmark_config_preserves_explicit_provider_runtime_settings(monkeypatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "gemini")
+    monkeypatch.setenv("LLM_MODEL", "gemini-test")
+    monkeypatch.setenv("LLM_MAX_RETRIES", "1")
+    monkeypatch.setenv("LLM_RATE_LIMIT_MAX_WAIT_SECONDS", "12")
+    monkeypatch.setenv("LLM_TIMEOUT_SECONDS", "17")
+    monkeypatch.setenv("LLM_BATCH_PROFILE", "1")
+
+    BenchmarkConfig().apply_environment()
+
+    import os
+
+    assert os.environ["LLM_PROVIDER"] == "gemini"
+    assert os.environ["LLM_MODEL"] == "gemini-test"
+    assert os.environ["LLM_MAX_RETRIES"] == "1"
+    assert os.environ["LLM_RATE_LIMIT_MAX_WAIT_SECONDS"] == "12"
+    assert os.environ["LLM_TIMEOUT_SECONDS"] == "17"
+    assert os.environ["LLM_BATCH_PROFILE"] == "1"

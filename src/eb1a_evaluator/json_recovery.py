@@ -3,15 +3,32 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 
 def _strip_code_fence(content: str) -> str:
-    value = content.strip()
-    if value.startswith("```") and value.endswith("```"):
-        lines = value.splitlines()
-        if len(lines) >= 3:
-            return "\n".join(lines[1:-1]).strip()
+    value = content.strip().lstrip("\ufeff")
+    fenced = re.search(r"```(?:json)?\s*(.*?)```", value, flags=re.IGNORECASE | re.DOTALL)
+    return fenced.group(1).strip() if fenced else value
+
+
+def _candidate_contents(content: str) -> tuple[str, ...]:
+    """Return conservative parsing candidates without modifying JSON values."""
+
+    cleaned = _strip_code_fence(content)
+    repaired = _remove_trailing_commas(cleaned)
+    return (cleaned,) if repaired == cleaned else (cleaned, repaired)
+
+
+def _decode_first_value(candidate: str):
+    """Decode the outermost JSON value, avoiding accidental nested arrays."""
+
+    starts = [index for index in (candidate.find("{"), candidate.find("[")) if index >= 0]
+    if not starts:
+        raise ValueError("Provider response did not contain JSON")
+    decoder = json.JSONDecoder()
+    value, _ = decoder.raw_decode(candidate[min(starts):])
     return value
 
 
@@ -54,19 +71,14 @@ def parse_json_object(content: str) -> dict[str, Any]:
 
     if not content or not content.strip():
         raise ValueError("Provider returned empty JSON content")
-    cleaned = _strip_code_fence(content)
-    decoder = json.JSONDecoder()
-    for candidate in (cleaned, _remove_trailing_commas(cleaned)):
-        for index, character in enumerate(candidate):
-            if character != "{":
-                continue
-            try:
-                value, _ = decoder.raw_decode(candidate[index:])
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(value, dict):
-                raise ValueError("Provider JSON response must be an object")
-            return value
+    for candidate in _candidate_contents(content):
+        try:
+            value = _decode_first_value(candidate)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(value, dict):
+            raise ValueError("Provider JSON response must be an object")
+        return value
     raise ValueError("Provider response did not contain a valid JSON object")
 
 
@@ -75,16 +87,11 @@ def parse_json_payload(content: str) -> dict[str, Any] | list[Any]:
 
     if not content or not content.strip():
         raise ValueError("Provider returned empty JSON content")
-    cleaned = _strip_code_fence(content)
-    decoder = json.JSONDecoder()
-    for candidate in (cleaned, _remove_trailing_commas(cleaned)):
-        for index, character in enumerate(candidate):
-            if character not in "[{":
-                continue
-            try:
-                value, _ = decoder.raw_decode(candidate[index:])
-            except json.JSONDecodeError:
-                continue
-            if isinstance(value, (dict, list)):
-                return value
+    for candidate in _candidate_contents(content):
+        try:
+            value = _decode_first_value(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, (dict, list)):
+            return value
     raise ValueError("Provider response did not contain a valid JSON object or array")

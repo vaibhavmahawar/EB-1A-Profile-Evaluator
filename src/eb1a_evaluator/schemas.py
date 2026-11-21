@@ -122,6 +122,87 @@ class ProfileLLMOutput(BaseModel):
         return self
 
 
+class CompactCriterionLLMOutput(BaseModel):
+    """Small internal response contract used by the profile-batch evaluator."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    criterion_id: str
+    rating: CriterionRating
+    evidence_indexes: list[int] = Field(max_length=3)
+    citation_ids: list[str] = Field(max_length=3)
+    reason: str
+
+    @field_validator("criterion_id")
+    @classmethod
+    def validate_compact_criterion_id(cls, value: str) -> str:
+        if value not in CRITERION_IDS:
+            raise ValueError(f"Unknown criterion_id: {value}")
+        return value
+
+    @field_validator("evidence_indexes")
+    @classmethod
+    def validate_evidence_indexes(cls, value: list[int]) -> list[int]:
+        if any(index < 0 for index in value):
+            raise ValueError("evidence_indexes must contain non-negative integers")
+        if len(value) != len(set(value)):
+            raise ValueError("evidence_indexes must be unique")
+        return value
+
+    @field_validator("citation_ids")
+    @classmethod
+    def validate_compact_citation_ids(cls, value: list[str]) -> list[str]:
+        if any(not item.strip() for item in value):
+            raise ValueError("citation_ids must not contain blank values")
+        if len(value) != len(set(value)):
+            raise ValueError("citation_ids must be unique")
+        return value
+
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("reason must not be blank")
+        return value.strip()
+
+
+class CompactProfileLLMOutput(BaseModel):
+    """Compact response containing one or more criterion decisions."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    assessments: list[CompactCriterionLLMOutput] = Field(min_length=1, max_length=10)
+
+    @model_validator(mode="after")
+    def validate_unique_compact_criteria(self) -> "CompactProfileLLMOutput":
+        ids = [assessment.criterion_id for assessment in self.assessments]
+        if len(ids) != len(set(ids)):
+            raise ValueError("compact assessments must not contain duplicate criteria")
+        return self
+
+
+def expand_compact_assessment(
+    compact: CompactCriterionLLMOutput,
+    *,
+    evidence_spans: list[str],
+    next_steps: list[str] | None = None,
+) -> CriterionAssessment:
+    """Convert an indexed compact decision into the existing public assessment schema."""
+
+    if any(index >= len(evidence_spans) for index in compact.evidence_indexes):
+        raise ValueError("evidence_indexes contains an index outside evidence_spans")
+    criterion = next(item for item in EB1A_CRITERIA if item.id == compact.criterion_id)
+    return CriterionAssessment(
+        criterion_id=compact.criterion_id,
+        criterion_name=criterion.name,
+        rating=compact.rating,
+        resume_evidence=[evidence_spans[index] for index in compact.evidence_indexes],
+        reasoning=compact.reason,
+        citation_ids=compact.citation_ids,
+        next_steps=(next_steps or [])[:2],
+    )
+
+
 class JudgeDecision(str, Enum):
     """How the judge assesses the original evaluator's rating."""
 
@@ -225,6 +306,9 @@ __all__ = [
     "CriterionAssessment",
     "CriterionLLMOutput",
     "ProfileLLMOutput",
+    "CompactCriterionLLMOutput",
+    "CompactProfileLLMOutput",
+    "expand_compact_assessment",
     "JudgeLLMOutput",
     "JudgeDecision",
     "SupportAssessment",

@@ -1,5 +1,48 @@
 # EB 1A Profile Evaluator
 
+## Docker deployment
+
+Docker is an optional deployment path for running the Streamlit interface in an isolated environment. It does not change the evaluator, retrieval logic, or output schema.
+
+Prerequisites:
+
+- Docker Desktop installed and running
+- A local `.env` file containing the selected provider configuration
+
+Build and start the application from PowerShell:
+
+```powershell
+Set-Location -LiteralPath "C:\Users\ASUS\Downloads\EB-1A Profile Evaluator"
+docker compose up --build
+```
+
+Open `http://localhost:8501` after the container starts. Compose loads API credentials from `.env`; credentials are not copied into the image or committed to Git.
+
+The Compose setup persists these generated artifacts in named Docker volumes:
+
+- `eb1a-index`: USCIS vector index at `/app/data/index`
+- `eb1a-eval-cache`: provider response cache at `/app/eval/cache`
+- `eb1a-eval-results`: benchmark reports at `/app/eval/results`
+
+To build the USCIS index inside the container before starting the UI:
+
+```powershell
+docker compose run --rm evaluator python scripts/build_uscis_index.py
+docker compose up
+```
+
+To run the offline benchmark inside the container:
+
+```powershell
+docker compose run --rm evaluator python eval/run_eval.py --mode heuristic
+```
+
+Stop the service with `Ctrl+C`, or run:
+
+```powershell
+docker compose down
+```
+
 This repository contains a prototype that evaluates synthetic candidate profiles against the 10 EB-1A extraordinary-ability criteria using grounded USCIS guidance.
 
 ## Milestone 1

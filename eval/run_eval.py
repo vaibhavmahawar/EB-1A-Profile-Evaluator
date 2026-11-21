@@ -39,6 +39,7 @@ def run(
     refresh_cache: bool = False,
     report_name: str = "live_full_profile_report.json",
     strategy_name: str | None = None,
+    batch_profile: bool | None = None,
 ) -> dict:
     if mode == "live":
         return run_live(
@@ -50,6 +51,7 @@ def run(
             refresh_cache=refresh_cache,
             report_name=report_name,
             strategy_name=strategy_name,
+            batch_profile=batch_profile,
         )
 
     cases = load_cases(data_dir)
@@ -100,6 +102,7 @@ def run_live(
     refresh_cache: bool = False,
     report_name: str = "live_full_profile_report.json",
     strategy_name: str | None = None,
+    batch_profile: bool | None = None,
 ) -> dict:
     """Run the real retrieval and Groq evaluator over all ten criteria."""
 
@@ -115,6 +118,9 @@ def run_live(
     # selection such as LLM_PROVIDER=gemini is not overwritten by the JSON config.
     _load_project_env()
     benchmark_config.apply_environment()
+    if batch_profile is not None:
+        os.environ["LLM_BATCH_PROFILE"] = "1" if batch_profile else "0"
+        os.environ["GROQ_BATCH_PROFILE"] = os.environ["LLM_BATCH_PROFILE"]
     config = default_config(root)
     if not config.index_dir.exists():
         raise FileNotFoundError(
@@ -267,6 +273,13 @@ def run_live(
         )
     structured_total = len(flattened_results)
     structured_valid = sum(item["structured_output_valid"] for item in flattened_results)
+    effective_configuration = benchmark_config.as_dict()
+    effective_configuration["batch_profile"] = (
+        os.getenv("LLM_BATCH_PROFILE", "0") == "1"
+    )
+    effective_configuration["batch_size"] = int(
+        os.getenv("LLM_BATCH_SIZE", str(benchmark_config.batch_size))
+    )
     report = {
         "mode": "live",
         "scope": "all ten criteria",
@@ -274,7 +287,7 @@ def run_live(
         "run_metadata": {
             "strategy_name": strategy_name,
             "configuration_hash": benchmark_config.config_hash(),
-            "configuration": benchmark_config.as_dict(),
+            "configuration": effective_configuration,
             "cache": llm_client.diagnostics()["cache"],
             "provider": llm_client.diagnostics(),
         },
@@ -346,6 +359,20 @@ if __name__ == "__main__":
         default="live_full_profile_report.json",
         help="output filename under eval/results; use a unique name to preserve runs",
     )
+    batch_group = parser.add_mutually_exclusive_group()
+    batch_group.add_argument(
+        "--batch-profile",
+        dest="batch_profile",
+        action="store_true",
+        help="use compact profile-level batching for live evaluation",
+    )
+    batch_group.add_argument(
+        "--criterion-profile",
+        dest="batch_profile",
+        action="store_false",
+        help="use the criterion-level evaluation path for live evaluation",
+    )
+    parser.set_defaults(batch_profile=None)
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     benchmark_config = None
@@ -361,4 +388,5 @@ if __name__ == "__main__":
         no_cache=args.no_cache,
         refresh_cache=args.refresh_cache,
         report_name=args.report_name,
+        batch_profile=args.batch_profile,
     )

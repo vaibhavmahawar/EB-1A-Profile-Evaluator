@@ -18,8 +18,8 @@ class BenchmarkConfig:
     prompt_version: str = "criterion-v3"
     request_delay_seconds: float = 5.0
     retry_backoff_seconds: float = 20.0
-    max_retries: int = 2
-    rate_limit_max_wait_seconds: float = 60.0
+    max_retries: int = 4
+    rate_limit_max_wait_seconds: float = 240.0
     timeout_seconds: float = 60.0
     batch_profile: bool = False
     batch_size: int = 2
@@ -63,13 +63,34 @@ class BenchmarkConfig:
             "LLM_PROVIDER": provider,
             "LLM_MODEL": model,
             "LLM_PROMPT_VERSION": os.getenv("LLM_PROMPT_VERSION") or self.prompt_version,
-            "LLM_REQUEST_DELAY_SECONDS": str(self.request_delay_seconds),
-            "LLM_RETRY_BACKOFF_SECONDS": str(self.retry_backoff_seconds),
-            "LLM_MAX_RETRIES": str(self.max_retries),
-            "LLM_RATE_LIMIT_MAX_WAIT_SECONDS": str(self.rate_limit_max_wait_seconds),
-            "LLM_TIMEOUT_SECONDS": str(self.timeout_seconds),
-            "LLM_BATCH_PROFILE": "1" if self.batch_profile else "0",
-            "LLM_BATCH_SIZE": str(self.batch_size),
+            "LLM_REQUEST_DELAY_SECONDS": os.getenv(
+                "LLM_REQUEST_DELAY_SECONDS",
+                os.getenv("GROQ_REQUEST_DELAY_SECONDS", str(self.request_delay_seconds)),
+            ),
+            "LLM_RETRY_BACKOFF_SECONDS": os.getenv(
+                "LLM_RETRY_BACKOFF_SECONDS",
+                os.getenv("GROQ_RETRY_BACKOFF_SECONDS", str(self.retry_backoff_seconds)),
+            ),
+            "LLM_MAX_RETRIES": os.getenv(
+                "LLM_MAX_RETRIES", os.getenv("GROQ_MAX_RETRIES", str(self.max_retries))
+            ),
+            "LLM_RATE_LIMIT_MAX_WAIT_SECONDS": os.getenv(
+                "LLM_RATE_LIMIT_MAX_WAIT_SECONDS",
+                os.getenv(
+                    "GROQ_RATE_LIMIT_MAX_WAIT_SECONDS", str(self.rate_limit_max_wait_seconds)
+                ),
+            ),
+            "LLM_TIMEOUT_SECONDS": os.getenv(
+                "LLM_TIMEOUT_SECONDS", os.getenv("GROQ_TIMEOUT_SECONDS", str(self.timeout_seconds))
+            ),
+            "LLM_BATCH_PROFILE": os.getenv(
+                "LLM_BATCH_PROFILE",
+                os.getenv("GROQ_BATCH_PROFILE", "1" if self.batch_profile else "0"),
+            ),
+            "LLM_BATCH_SIZE": os.getenv(
+                "LLM_BATCH_SIZE",
+                os.getenv("GROQ_BATCH_SIZE", str(self.batch_size)),
+            ),
             "GROQ_MODEL": model,
             "GROQ_PROMPT_VERSION": self.prompt_version,
             "GROQ_REQUEST_DELAY_SECONDS": str(self.request_delay_seconds),
@@ -77,8 +98,10 @@ class BenchmarkConfig:
             "GROQ_MAX_RETRIES": str(self.max_retries),
             "GROQ_RATE_LIMIT_MAX_WAIT_SECONDS": str(self.rate_limit_max_wait_seconds),
             "GROQ_TIMEOUT_SECONDS": str(self.timeout_seconds),
-            "GROQ_BATCH_PROFILE": "1" if self.batch_profile else "0",
-            "GROQ_BATCH_SIZE": str(self.batch_size),
+            "GROQ_BATCH_PROFILE": os.getenv(
+                "GROQ_BATCH_PROFILE", "1" if self.batch_profile else "0"
+            ),
+            "GROQ_BATCH_SIZE": os.getenv("GROQ_BATCH_SIZE", str(self.batch_size)),
             "USCIS_RETRIEVAL_TOP_K": str(self.uscis_retrieval_top_k),
             "RESUME_RETRIEVAL_TOP_K": str(self.resume_retrieval_top_k),
             "RESUME_RETRIEVAL_MIN_SCORE": str(self.resume_retrieval_min_score),

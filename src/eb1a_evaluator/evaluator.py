@@ -9,18 +9,27 @@ from pathlib import Path
 
 from .criteria import EB1A_CRITERIA
 from .json_recovery import parse_json_payload
-from .prompts import criterion_prompt, profile_prompt
+from .prompts import (
+    compact_criterion_prompt,
+    compact_profile_prompt,
+    criterion_prompt,
+    profile_prompt,
+)
+from .recommendations import next_steps_for_criterion
 from .response_cache import SQLiteResponseCache, failure_category, make_cache_key
 from .resume import ResumeDocument, normalize_resume_text
 from .resume_retrieval import ResumeEvidenceRetriever
 from .retrieval import RetrievedChunk, USCISRetriever
 from .schemas import (
+    CompactCriterionLLMOutput,
+    CompactProfileLLMOutput,
     CriterionAssessment,
     CriterionLLMOutput,
     CriterionRating,
     JudgeLLMOutput,
     ProfileEvaluation,
     ProfileLLMOutput,
+    expand_compact_assessment,
 )
 from .scoring import count_strong_or_partial, main_gaps, readiness_score, strongest_criteria
 
@@ -115,14 +124,14 @@ class OpenAICriterionClient:
             )
         )
         self.max_rate_limit_retries = max(
-            0, int(os.getenv("LLM_MAX_RETRIES", os.getenv("GROQ_MAX_RETRIES", "2")))
+            0, int(os.getenv("LLM_MAX_RETRIES", os.getenv("GROQ_MAX_RETRIES", "4")))
         )
         self.max_rate_limit_wait_seconds = max(
             0.0,
             float(
                 os.getenv(
                     "LLM_RATE_LIMIT_MAX_WAIT_SECONDS",
-                    os.getenv("GROQ_RATE_LIMIT_MAX_WAIT_SECONDS", "60"),
+                    os.getenv("GROQ_RATE_LIMIT_MAX_WAIT_SECONDS", "240"),
                 )
             ),
         )
@@ -148,10 +157,15 @@ class OpenAICriterionClient:
                 if self.provider == "gemini"
                 else "https://api.groq.com/openai/v1"
             )
+            provider_base_url = (
+                os.getenv("GEMINI_BASE_URL")
+                if self.provider == "gemini"
+                else os.getenv("GROQ_BASE_URL")
+            )
 
             client = OpenAI(
                 api_key=api_key,
-                base_url=os.getenv("LLM_BASE_URL", default_base_url),
+                base_url=os.getenv("LLM_BASE_URL") or provider_base_url or default_base_url,
                 timeout=float(
                     os.getenv("LLM_TIMEOUT_SECONDS", os.getenv("GROQ_TIMEOUT_SECONDS", "60"))
                 ),
@@ -234,6 +248,64 @@ class OpenAICriterionClient:
             response if "response" in locals() else fallback,
         )
         return assessments
+
+    def parse_compact_profile_assessments(
+        self, system: str, user: str
+    ) -> list[CompactCriterionLLMOutput]:
+        """Parse a compact profile batch without expanding it into the public schema."""
+
+        cache_key = self._cache_key("compact_profile_batch", system, user)
+        cached = self._get_cached(cache_key)
+        if cached is not None:
+            return [
+                CompactCriterionLLMOutput.model_validate(item)
+                for item in cached["assessments"]
+            ]
+        self._wait_for_request()
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        try:
+            response = self._request_with_rate_limit_retry(
+                lambda: self._structured_parse(messages, CompactProfileLLMOutput)
+            )
+            parsed = self._parsed_output(response)
+            if parsed is None:
+                raise ValueError("OpenAI returned no compact batch assessment")
+            if not isinstance(parsed, CompactProfileLLMOutput):
+                parsed = CompactProfileLLMOutput.model_validate(parsed)
+        except Exception as error:
+            fallback_errors = {"BadRequestError", "ValidationError", "ValueError"}
+            if type(error).__name__ not in fallback_errors:
+                raise
+            parsed, response = self._parse_fallback_model(messages, CompactProfileLLMOutput)
+        self._store_cached(
+            cache_key,
+            {"assessments": [item.model_dump(mode="json") for item in parsed.assessments]},
+            response,
+        )
+        return parsed.assessments
+
+    def parse_compact_assessment(
+        self, system: str, user: str
+    ) -> CompactCriterionLLMOutput:
+        """Parse one compact criterion response for targeted batch repair."""
+
+        self._wait_for_request()
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        response = self._request_with_rate_limit_retry(
+            lambda: self._structured_parse(messages, CompactCriterionLLMOutput)
+        )
+        parsed = self._parsed_output(response)
+        if parsed is None:
+            raise ValueError("OpenAI returned no compact criterion assessment")
+        if not isinstance(parsed, CompactCriterionLLMOutput):
+            parsed = CompactCriterionLLMOutput.model_validate(parsed)
+        return parsed
 
     def parse_judgment(self, system: str, user: str) -> JudgeLLMOutput:
         """Parse one structured LLM-as-judge response with cache and fallback."""
@@ -339,11 +411,15 @@ class OpenAICriterionClient:
         """Normalize safe Gemini/Groq array-shaped batch responses."""
 
         payload = parse_json_payload(content)
+        is_profile_batch = output_model.__name__ in {
+            "ProfileLLMOutput",
+            "CompactProfileLLMOutput",
+        }
         if isinstance(payload, list):
-            if output_model.__name__ != "ProfileLLMOutput":
+            if not is_profile_batch:
                 raise ValueError("Single-criterion provider response must be an object")
             return {"assessments": payload}
-        if output_model.__name__ == "ProfileLLMOutput":
+        if is_profile_batch:
             for key in ("criteria", "results", "outputs"):
                 if isinstance(payload.get(key), list) and "assessments" not in payload:
                     return {"assessments": payload[key]}
@@ -568,12 +644,20 @@ class CriterionEvaluator:
         )
 
     def evaluate_batch(self, resume: ResumeDocument) -> list[CriterionAssessment]:
-        """Evaluate criteria in small provider batches to reduce rate-limit pressure."""
+        """Evaluate criteria in provider batches to reduce call and parse failures."""
 
         contexts = []
         for criterion in EB1A_CRITERIA:
             resume_passages, uscis_chunks = self._retrieve_context(criterion, resume)
             contexts.append((criterion, resume_passages, uscis_chunks))
+
+        compact_enabled = os.getenv(
+            "LLM_COMPACT_PROFILE_BATCH",
+            os.getenv("GROQ_COMPACT_PROFILE_BATCH", "1"),
+        ) == "1"
+        if compact_enabled:
+            return self._evaluate_compact_profile_batch(contexts, resume)
+
         verified = []
         batch_size = max(
             1,
@@ -612,6 +696,94 @@ class CriterionEvaluator:
                     for criterion, _, _ in group
                 )
         return verified
+
+    def _evaluate_compact_profile_batch(self, contexts, resume: ResumeDocument):
+        """Run one compact all-criteria request and repair only missing criteria."""
+
+        system, user = compact_profile_prompt(
+            contexts,
+            prompt_version=os.getenv(
+                "LLM_PROMPT_VERSION",
+                os.getenv("GROQ_PROMPT_VERSION", "criterion-v3"),
+            ),
+        )
+        try:
+            compact_assessments = self.llm_client.parse_compact_profile_assessments(
+                system, user
+            )
+        except Exception:
+            # Preserve the existing path as a compatibility fallback if a provider
+            # cannot produce the compact profile response.
+            return [self.evaluate(criterion.id, resume) for criterion, _, _ in contexts]
+
+        context_by_id = {
+            criterion.id: (criterion, passages, chunks)
+            for criterion, passages, chunks in contexts
+        }
+        results: dict[str, CriterionAssessment] = {}
+        for compact in compact_assessments:
+            context = context_by_id.get(compact.criterion_id)
+            if context is None:
+                continue
+            criterion, resume_passages, uscis_chunks = context
+            try:
+                expanded = expand_compact_assessment(
+                    compact,
+                    evidence_spans=[passage.text for passage in resume_passages[:5]],
+                    next_steps=next_steps_for_criterion(criterion.id, compact.rating),
+                )
+                results[criterion.id] = verify_assessment(
+                    expanded,
+                    resume_passages=resume_passages,
+                    uscis_chunks=uscis_chunks,
+                    resume_text=resume.raw_text,
+                )
+            except Exception:
+                # Invalid individual items are repaired below rather than discarding
+                # the valid decisions from the profile batch.
+                continue
+
+        repaired: list[CriterionAssessment] = []
+        for criterion, _, _ in contexts:
+            if criterion.id in results:
+                repaired.append(results[criterion.id])
+                continue
+            try:
+                repaired.append(self._repair_compact_criterion(context_by_id[criterion.id], resume))
+            except Exception as error:
+                if type(error).__name__ == "RateLimitAbortError":
+                    raise
+                try:
+                    repaired.append(self.evaluate(criterion.id, resume))
+                except Exception as fallback_error:
+                    if type(fallback_error).__name__ == "RateLimitAbortError":
+                        raise
+                    repaired.append(self._failure_assessment(criterion, fallback_error))
+        return repaired
+
+    def _repair_compact_criterion(self, context, resume: ResumeDocument) -> CriterionAssessment:
+        criterion, resume_passages, uscis_chunks = context
+        system, user = compact_criterion_prompt(
+            context,
+            prompt_version=os.getenv(
+                "LLM_PROMPT_VERSION",
+                os.getenv("GROQ_PROMPT_VERSION", "criterion-v3"),
+            ),
+        )
+        compact = self.llm_client.parse_compact_assessment(system, user)
+        if compact.criterion_id != criterion.id:
+            raise ValueError(f"Repair returned {compact.criterion_id}, expected {criterion.id}")
+        expanded = expand_compact_assessment(
+            compact,
+            evidence_spans=[passage.text for passage in resume_passages[:5]],
+            next_steps=next_steps_for_criterion(criterion.id, compact.rating),
+        )
+        return verify_assessment(
+            expanded,
+            resume_passages=resume_passages,
+            uscis_chunks=uscis_chunks,
+            resume_text=resume.raw_text,
+        )
 
     @staticmethod
     def _failure_assessment(criterion, error: Exception) -> CriterionAssessment:

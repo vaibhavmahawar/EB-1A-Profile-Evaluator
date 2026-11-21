@@ -14,6 +14,7 @@ from eb1a_evaluator.resume import ingest_resume
 from eb1a_evaluator.resume_retrieval import RetrievedResumePassage
 from eb1a_evaluator.retrieval import RetrievedChunk
 from eb1a_evaluator.schemas import (
+    CompactProfileLLMOutput,
     CriterionAssessment,
     CriterionLLMOutput,
     CriterionRating,
@@ -286,6 +287,14 @@ def test_openai_adapter_normalizes_array_shaped_batch_output() -> None:
         '"citation_ids":[],"next_steps":[]}]'
     normalized = adapter._normalize_provider_payload(payload, ProfileLLMOutput)
     assert len(ProfileLLMOutput.model_validate(normalized).assessments) == 1
+
+
+def test_openai_adapter_normalizes_array_shaped_compact_batch_output() -> None:
+    adapter = OpenAICriterionClient(model="test-model", client=FakeFallbackClient())
+    payload = '[{"criterion_id":"awards_and_prizes","rating":"Missing",' \
+        '"evidence_indexes":[],"citation_ids":[],"reason":"none"}]'
+    normalized = adapter._normalize_provider_payload(payload, CompactProfileLLMOutput)
+    assert len(CompactProfileLLMOutput.model_validate(normalized).assessments) == 1
 
 
 def test_openai_adapter_replays_successful_response_from_cache(tmp_path) -> None:

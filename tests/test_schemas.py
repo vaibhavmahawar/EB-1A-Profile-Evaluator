@@ -2,7 +2,15 @@ import pytest
 from pydantic import ValidationError
 
 from eb1a_evaluator.criteria import EB1A_CRITERIA
-from eb1a_evaluator.schemas import CriterionAssessment, CriterionRating, ProfileEvaluation
+from eb1a_evaluator.recommendations import next_steps_for_criterion
+from eb1a_evaluator.schemas import (
+    CompactCriterionLLMOutput,
+    CompactProfileLLMOutput,
+    CriterionAssessment,
+    CriterionRating,
+    ProfileEvaluation,
+    expand_compact_assessment,
+)
 
 
 def make_assessments() -> list[CriterionAssessment]:
@@ -97,3 +105,57 @@ def test_inconsistent_summary_values_are_rejected() -> None:
             criteria_count_strong_or_partial=0,
             readiness_score=10,
         )
+
+
+def test_compact_assessment_validates_and_expands_to_public_schema() -> None:
+    compact = CompactCriterionLLMOutput(
+        criterion_id="awards_and_prizes",
+        rating=CriterionRating.INSUFFICIENT_INFO,
+        evidence_indexes=[0],
+        citation_ids=["chunk-1"],
+        reason="The award is listed, but recognition and selectivity are not documented.",
+    )
+
+    expanded = expand_compact_assessment(
+        compact,
+        evidence_spans=["She received the Early Career Award."],
+        next_steps=["Collect official award selection documentation."],
+    )
+
+    assert isinstance(CompactProfileLLMOutput(assessments=[compact]), CompactProfileLLMOutput)
+    assert expanded.criterion_name == "Awards and prizes"
+    assert expanded.resume_evidence == ["She received the Early Career Award."]
+    assert expanded.reasoning == compact.reason
+    assert expanded.next_steps == ["Collect official award selection documentation."]
+
+
+def test_compact_assessment_rejects_invalid_evidence_index() -> None:
+    compact = CompactCriterionLLMOutput(
+        criterion_id="awards_and_prizes",
+        rating="Missing",
+        evidence_indexes=[1],
+        citation_ids=[],
+        reason="No evidence was supplied.",
+    )
+
+    with pytest.raises(ValueError, match="outside evidence_spans"):
+        expand_compact_assessment(compact, evidence_spans=["Only span"])
+
+
+def test_compact_profile_rejects_duplicate_criteria() -> None:
+    item = CompactCriterionLLMOutput(
+        criterion_id="awards_and_prizes",
+        rating="Missing",
+        evidence_indexes=[],
+        citation_ids=[],
+        reason="No evidence was supplied.",
+    )
+
+    with pytest.raises(ValueError, match="duplicate"):
+        CompactProfileLLMOutput(assessments=[item, item])
+
+
+def test_next_steps_are_assembled_locally_by_criterion() -> None:
+    steps = next_steps_for_criterion("leading_or_critical_role", CriterionRating.PARTIAL)
+    assert len(steps) == 2
+    assert "organization" in steps[1].lower()

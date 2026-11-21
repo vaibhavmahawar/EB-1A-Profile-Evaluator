@@ -1,0 +1,19 @@
+services:
+  evaluator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: eb1a-profile-evaluator:latest
+    env_file:
+      - .env
+    ports:
+      - "8501:8501"
+    volumes:
+      - eb1a-index:/app/data/index
+      - eb1a-eval-cache:/app/eval/cache
+      - eb1a-eval-results:/app/eval/results
+
+volumes:
+  eb1a-index:
+  eb1a-eval-cache:
+  eb1a-eval-results:

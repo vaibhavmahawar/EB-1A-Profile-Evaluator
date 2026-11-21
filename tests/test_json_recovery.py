@@ -31,3 +31,14 @@ def test_parse_json_payload_accepts_array_for_batch_normalization() -> None:
     assert parse_json_payload('[{"criterion_id": "awards_and_prizes"}]')[0][
         "criterion_id"
     ] == "awards_and_prizes"
+
+
+def test_parse_json_payload_recovers_fenced_array_with_preamble() -> None:
+    content = "Model response:\n```JSON\n[{\"criterion_id\": \"awards_and_prizes\"}]\n```\n"
+    payload = parse_json_payload(content)
+    assert isinstance(payload, list)
+    assert payload[0]["criterion_id"] == "awards_and_prizes"
+
+
+def test_parse_json_object_ignores_utf8_bom() -> None:
+    assert parse_json_object("\ufeff{\"rating\": \"Missing\"}")["rating"] == "Missing"
