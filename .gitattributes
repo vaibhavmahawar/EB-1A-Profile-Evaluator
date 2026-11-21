@@ -1,0 +1,4 @@
+# USCIS source snapshots are reference data, not application source code.
+data/uscis/raw/*.html linguist-vendored
+data/uscis/raw/*.pdf linguist-vendored
+data/uscis/processed/* linguist-generated
