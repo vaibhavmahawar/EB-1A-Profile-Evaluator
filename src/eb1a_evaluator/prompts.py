@@ -78,6 +78,7 @@ def criterion_prompt(
         "This is informational analysis, not legal advice.\n\n"
         f"Criterion-specific evidence guidance: {criterion.evidence_guidance} "
         f"Rating calibration: {criterion.rating_guidance} "
+        f"Criterion-specific examples: {' '.join(criterion.calibration_examples)} "
         "Return only the requested JSON object with the exact schema fields; do not use "
         "Markdown fences or explanatory text outside the JSON."
     )
@@ -130,6 +131,7 @@ def profile_prompt(
             f"""CRITERION: {criterion.name} ({criterion.id})
 Evidence guidance: {criterion.evidence_guidance}
 Rating calibration: {criterion.rating_guidance}
+Criterion-specific examples: {' '.join(criterion.calibration_examples)}
 Resume passages:
 {resume_text or "No resume passages were retrieved."}
 Allowed exact evidence quotes:
@@ -172,6 +174,7 @@ def compact_profile_prompt(
             f"""CRITERION: {criterion.name} ({criterion.id})
 Evidence guidance: {criterion.evidence_guidance}
 Rating calibration: {criterion.rating_guidance}
+Criterion-specific examples: {' '.join(criterion.calibration_examples)}
 Evidence spans (use these local indexes only):
 {evidence}
 USCIS guidance chunks (use these IDs only):

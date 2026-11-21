@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from .calibration import calibrate_assessment
 from .criteria import EB1A_CRITERIA
 from .json_recovery import parse_json_payload
 from .prompts import (
@@ -111,6 +112,8 @@ class OpenAICriterionClient:
             "LLM_PROMPT_VERSION",
             os.getenv("GROQ_PROMPT_VERSION", "criterion-v3"),
         )
+        raw_temperature = os.getenv("LLM_TEMPERATURE")
+        self.temperature = float(raw_temperature) if raw_temperature else None
         self.request_delay_seconds = float(
             os.getenv(
                 "LLM_REQUEST_DELAY_SECONDS",
@@ -138,6 +141,9 @@ class OpenAICriterionClient:
         self._last_request_at: float | None = None
         self.cache = cache
         self.provider_calls = 0
+        self.retry_attempts = 0
+        self.logical_calls = 0
+        self.call_counts: dict[str, int] = {}
         self.request_latencies: list[float] = []
         self.token_usage: dict[str, int] = {}
 
@@ -175,6 +181,7 @@ class OpenAICriterionClient:
         self.client = client
 
     def parse_assessment(self, system: str, user: str) -> CriterionAssessment:
+        self._record_logical_call("criterion")
         cache_key = self._cache_key("criterion", system, user)
         cached = self._get_cached(cache_key)
         if cached is not None:
@@ -215,6 +222,7 @@ class OpenAICriterionClient:
     ) -> list[CriterionAssessment]:
         """Parse one batch response and convert its strict items to domain models."""
 
+        self._record_logical_call("profile_batch")
         cache_key = self._cache_key("profile_batch", system, user)
         cached = self._get_cached(cache_key)
         if cached is not None:
@@ -254,6 +262,7 @@ class OpenAICriterionClient:
     ) -> list[CompactCriterionLLMOutput]:
         """Parse a compact profile batch without expanding it into the public schema."""
 
+        self._record_logical_call("compact_profile_batch")
         cache_key = self._cache_key("compact_profile_batch", system, user)
         cached = self._get_cached(cache_key)
         if cached is not None:
@@ -292,6 +301,7 @@ class OpenAICriterionClient:
     ) -> CompactCriterionLLMOutput:
         """Parse one compact criterion response for targeted batch repair."""
 
+        self._record_logical_call("compact_repair")
         self._wait_for_request()
         messages = [
             {"role": "system", "content": system},
@@ -310,6 +320,7 @@ class OpenAICriterionClient:
     def parse_judgment(self, system: str, user: str) -> JudgeLLMOutput:
         """Parse one structured LLM-as-judge response with cache and fallback."""
 
+        self._record_logical_call("judge")
         cache_key = self._cache_key("judge", system, user)
         cached = self._get_cached(cache_key)
         if cached is not None:
@@ -339,16 +350,19 @@ class OpenAICriterionClient:
         return judgment
 
     def _structured_parse(self, messages, output_model):
+        options = {"temperature": self.temperature} if self.temperature is not None else {}
         if self.provider == "gemini":
             return self.client.beta.chat.completions.parse(
                 model=self.model,
                 messages=messages,
                 response_format=output_model,
+                **options,
             )
         return self.client.responses.parse(
             model=self.model,
             input=messages,
             text_format=output_model,
+            **options,
         )
 
     def _parsed_output(self, response):
@@ -449,6 +463,7 @@ class OpenAICriterionClient:
                     raise
                 if attempt >= self.max_rate_limit_retries:
                     raise
+                self.retry_attempts += 1
                 server_wait = self._retry_after_seconds(error)
                 exponential_wait = self.retry_backoff_seconds * (2**attempt)
                 wait_seconds = max(server_wait, exponential_wait)
@@ -523,7 +538,11 @@ class OpenAICriterionClient:
             "provider": self.provider,
             "model": self.model,
             "prompt_version": self.prompt_version,
+            "temperature": self.temperature,
             "provider_calls": self.provider_calls,
+            "logical_calls": self.logical_calls,
+            "call_counts": dict(self.call_counts),
+            "retry_attempts": self.retry_attempts,
             "request_latency_seconds": self.request_latencies,
             "average_request_latency_seconds": round(
                 sum(self.request_latencies) / max(1, len(self.request_latencies)), 4
@@ -538,6 +557,10 @@ class OpenAICriterionClient:
             else {"enabled": False, "hits": 0, "misses": 0, "writes": 0}
         )
         return result
+
+    def _record_logical_call(self, call_kind: str) -> None:
+        self.logical_calls += 1
+        self.call_counts[call_kind] = self.call_counts.get(call_kind, 0) + 1
 
 
 def verify_assessment(
@@ -576,6 +599,11 @@ class CriterionEvaluator:
         self.uscis_retriever = uscis_retriever
         self.resume_retriever = ResumeEvidenceRetriever(embeddings)
         self.llm_client = llm_client
+        self.last_batch_trace: dict = {
+            "initial_criteria": [],
+            "repaired_criteria": [],
+            "legacy_fallback_criteria": [],
+        }
 
     @staticmethod
     def _criterion_queries(criterion) -> tuple[str, ...]:
@@ -636,12 +664,12 @@ class CriterionEvaluator:
             )
             time.sleep(retry_delay)
             assessment = self.llm_client.parse_assessment(system, user)
-        return verify_assessment(
+        return calibrate_assessment(verify_assessment(
             assessment,
             resume_passages=resume_passages,
             uscis_chunks=uscis_chunks,
             resume_text=resume.raw_text,
-        )
+        ), has_evidence=bool(resume_passages))
 
     def evaluate_batch(self, resume: ResumeDocument) -> list[CriterionAssessment]:
         """Evaluate criteria in provider batches to reduce call and parse failures."""
@@ -700,6 +728,11 @@ class CriterionEvaluator:
     def _evaluate_compact_profile_batch(self, contexts, resume: ResumeDocument):
         """Run one compact all-criteria request and repair only missing criteria."""
 
+        self.last_batch_trace = {
+            "initial_criteria": [],
+            "repaired_criteria": [],
+            "legacy_fallback_criteria": [],
+        }
         system, user = compact_profile_prompt(
             contexts,
             prompt_version=os.getenv(
@@ -727,17 +760,18 @@ class CriterionEvaluator:
                 continue
             criterion, resume_passages, uscis_chunks = context
             try:
+                self.last_batch_trace["initial_criteria"].append(criterion.id)
                 expanded = expand_compact_assessment(
                     compact,
                     evidence_spans=[passage.text for passage in resume_passages[:5]],
                     next_steps=next_steps_for_criterion(criterion.id, compact.rating),
                 )
-                results[criterion.id] = verify_assessment(
+                results[criterion.id] = calibrate_assessment(verify_assessment(
                     expanded,
                     resume_passages=resume_passages,
                     uscis_chunks=uscis_chunks,
                     resume_text=resume.raw_text,
-                )
+                ), has_evidence=bool(resume_passages))
             except Exception:
                 # Invalid individual items are repaired below rather than discarding
                 # the valid decisions from the profile batch.
@@ -749,11 +783,13 @@ class CriterionEvaluator:
                 repaired.append(results[criterion.id])
                 continue
             try:
+                self.last_batch_trace["repaired_criteria"].append(criterion.id)
                 repaired.append(self._repair_compact_criterion(context_by_id[criterion.id], resume))
             except Exception as error:
                 if type(error).__name__ == "RateLimitAbortError":
                     raise
                 try:
+                    self.last_batch_trace["legacy_fallback_criteria"].append(criterion.id)
                     repaired.append(self.evaluate(criterion.id, resume))
                 except Exception as fallback_error:
                     if type(fallback_error).__name__ == "RateLimitAbortError":
@@ -778,12 +814,12 @@ class CriterionEvaluator:
             evidence_spans=[passage.text for passage in resume_passages[:5]],
             next_steps=next_steps_for_criterion(criterion.id, compact.rating),
         )
-        return verify_assessment(
+        return calibrate_assessment(verify_assessment(
             expanded,
             resume_passages=resume_passages,
             uscis_chunks=uscis_chunks,
             resume_text=resume.raw_text,
-        )
+        ), has_evidence=bool(resume_passages))
 
     @staticmethod
     def _failure_assessment(criterion, error: Exception) -> CriterionAssessment:

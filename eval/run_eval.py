@@ -257,6 +257,11 @@ def run_live(
                     "prompt_injection_categories": [
                         finding.category for finding in resume.prompt_injection_findings
                     ],
+                    "batch_trace": getattr(
+                        profile_evaluator.criterion_evaluator,
+                        "last_batch_trace",
+                        {},
+                    ),
                 },
             }
         )

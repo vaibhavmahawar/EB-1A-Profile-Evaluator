@@ -13,6 +13,7 @@ class CriterionDefinition:
     evidence_guidance: str
     query_variants: tuple[str, ...] = ()
     rating_guidance: str = ""
+    calibration_examples: tuple[str, ...] = ()
 
 
 EB1A_CRITERIA: tuple[CriterionDefinition, ...] = (
@@ -25,6 +26,9 @@ EB1A_CRITERIA: tuple[CriterionDefinition, ...] = (
         ("selective award competition excellence prize nationally internationally recognized",),
         "A listed award is not Strong without recognition, selectivity, scope, or "
         "comparable proof.",
+        ("Strong: nationally recognized and highly selective award with recipient counts. "
+         "Partial: award is listed but prestige or selectivity is not documented. "
+         "Missing: no award claim appears.",),
     ),
     CriterionDefinition(
         "outstanding_membership",
@@ -65,6 +69,9 @@ EB1A_CRITERIA: tuple[CriterionDefinition, ...] = (
         ("adopted implementation licensed patent industry impact citations major significance",),
         "Original work alone is insufficient; Strong requires concrete field impact or "
         "independent significance evidence.",
+        ("Strong: original work plus adoption, licensing, patents, or independent evidence "
+         "of major field impact. Partial: original work or citations are described without "
+         "major-significance proof. Missing: no contribution claim appears.",),
     ),
     CriterionDefinition(
         "scholarly_articles",
@@ -97,6 +104,9 @@ EB1A_CRITERIA: tuple[CriterionDefinition, ...] = (
         ),
         "Strong requires both a leading or critical role and evidence that the "
         "organization is distinguished.",
+        ("Strong: a clearly leading or critical role and independent evidence the organization "
+         "is distinguished. Partial: the role or organization reputation is asserted but one "
+         "side lacks support. Missing: no qualifying role claim appears.",),
     ),
     CriterionDefinition(
         "high_salary",
@@ -106,6 +116,12 @@ EB1A_CRITERIA: tuple[CriterionDefinition, ...] = (
         ("compensation remuneration equity salary survey wage comparison field region",),
         "A salary amount alone is insufficient; Strong requires reliable comparison "
         "with the field, region, or role.",
+        (
+            "Strong: compensation plus a reliable percentile, market, regional, or role "
+            "comparison. Partial: compensation is stated without comparison. Missing: no "
+            "remuneration claim appears. Insufficient Info: remuneration is mentioned but "
+            "the amount or comparability cannot be determined.",
+        ),
     ),
     CriterionDefinition(
         "commercial_success_performing_arts",
