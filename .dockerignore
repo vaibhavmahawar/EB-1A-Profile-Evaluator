@@ -12,6 +12,7 @@ __pycache__
 .ruff_cache
 
 # Generated indexes, caches, reports, and local artifacts
+data/uscis/raw
 data/index
 eval/cache
 eval/results

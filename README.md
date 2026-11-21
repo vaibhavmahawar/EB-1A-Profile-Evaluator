@@ -41,21 +41,16 @@ For Groq, use `LLM_PROVIDER=groq`, `GROQ_API_KEY`, and a Groq model. The provide
 
 ## USCIS knowledge base
 
-The baseline USCIS Policy Manual PDF is stored under `data/uscis/raw/`. Process the existing local snapshot with:
+The repository includes the processed USCIS chunks and provenance metadata under `data/uscis/processed/`. The original downloaded HTML/PDF snapshots are intentionally excluded from Git because they are source artifacts rather than application code. The local raw files may still exist on a developer machine and are ignored by Git.
 
-```text
-$env:PYTHONPATH = "src"
-python scripts/process_uscis_corpus.py
-```
-
-To explicitly refresh the snapshot from the official USCIS source and process it:
+To download the official USCIS source locally and process it:
 
 ```text
 $env:PYTHONPATH = "src"
 python scripts/refresh_uscis_corpus.py
 ```
 
-The refresh command replaces the local snapshot only when explicitly run. The processed chunks are written to `data/uscis/processed/`.
+The refresh command downloads the source only when explicitly run and writes the processed chunks to `data/uscis/processed/`. The committed processed corpus is sufficient for normal retrieval, index building, Docker startup, and evaluation.
 
 ## First criterion evaluator
 

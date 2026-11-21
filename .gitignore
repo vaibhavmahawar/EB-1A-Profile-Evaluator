@@ -10,6 +10,7 @@ env/
 
 # Generated indexes, reports, and local artifacts
 data/index/
+data/uscis/raw/
 eval/results/
 eval/cache/
 dist/
