@@ -260,31 +260,22 @@ criteria, compact profile batching, `openai/gpt-oss-20b`, and temperature `0`.
 The result is a prototype measurement, not a legal conclusion or a general-world
 accuracy claim.
 
-| Metric | This repository: best single run | Syamuel repository: reported run | Naush repository |
-| --- | ---: | ---: | --- |
-| Evaluation scope | 8 profiles / 80 criterion ratings | 5 profiles / 50 criterion ratings | 7 profiles / 70 criterion ratings |
-| Rating accuracy | 58/80 (72.5%) | 39/50 (78%); balanced prompt 40/50 (80%) | 68/70 (97.14%) |
-| Valid-output accuracy | 58/79 (73.42%) | Not reported separately | Not reported separately |
-| Structured-output validity | 79/80 (98.75%) | Not reported as a separate metric | Not reported as a separate metric |
-| Evaluation failures | 1/80 | Discussed as diagnostic errors, with 11 mismatches reported | Fallback count and failure analysis reported; exact comparable count not shown in table |
-| Citation validity | 100% | 100% (23/23) | 100% |
-| Citation quality | Included through citation/evidence validators | Not separately named | 100% |
-| Grounded/unsupported evidence | 0% hallucinated evidence | 100% grounded (24/24) | 0% hallucinated evidence |
-| Retrieval metrics | Empty retrieval rate: 0%; latency: 0.436s average | Recall@5, MRR, and nDCG@5 reported | BM25: R@3 0.95, R@5 0.95, MRR 0.867; Sentence Transformer: 1.00, 1.00, 0.967; Hybrid: 1.00, 1.00, 0.975 |
-| Prompt/model comparison | Supported by `eval/compare_strategies.py` | Balanced versus evidence-first prompt comparison | Not independently verified |
-| Variance reporting | 3-run mean: 70.83%, range: 68.75%–72.5% | Not reported in the repository README | Not reported in the repository README |
+| Metric | Best single run |
+| --- | ---: |
+| Evaluation scope | 8 profiles / 80 criterion ratings |
+| Rating accuracy | 58/80 (72.5%) |
+| Valid-output accuracy | 58/79 (73.42%) |
+| Structured-output validity | 79/80 (98.75%) |
+| Evaluation failures | 1/80 |
+| Citation validity | 100% |
+| Grounded/unsupported evidence | 0% hallucinated evidence |
+| Retrieval metrics | Empty retrieval rate: 0%; latency: 0.436s average |
+| Prompt/model comparison | Supported by `eval/compare_strategies.py` |
+| Variance reporting | 3-run mean: 70.83%, range: 68.75%–72.5% |
 
-These results are not directly equivalent: the repositories use different profile
-sets, labels, prompt designs, retrieval protocols, and failure accounting. Our
-benchmark counts all 80 criterion pairs and conservatively reports failed calls as
-failures with a fallback rating; therefore, its exact accuracy should not be
-compared as if the datasets and scoring protocols were identical. Syamuel's README
-explicitly presents its results as small synthetic diagnostic measurements. Naush's
-README also marks its rating and retrieval figures as synthetic/diagnostic, and
-records corpus, model, embedding, prompt, and retrieval metadata. See the
-[Syamuel repository](https://github.com/Syamuel223/EB-1A-Profile-Evaluator) and
-[Naush repository](https://github.com/Naush-zd/EB-1A-Profile-Evaluator) for the
-reference projects.
+These are prototype measurements from synthetic profiles, not legal conclusions
+or general-world accuracy claims. The benchmark counts all 80 criterion pairs and
+conservatively reports failed calls as failures with a fallback rating.
 
 The best-run report is `eval/results/variance_run_1.json`. Repeated-run stability is
 reported separately in `eval/results/repeated_run_summary_latest.json`; it should
